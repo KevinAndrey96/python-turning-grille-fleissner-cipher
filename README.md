@@ -1,98 +1,113 @@
-# Algoritmo de Cifrado por Rejilla Giratoria (Turning Grille / Fleissner) en Python
+# Rejilla giratoria de Fleissner en Python
 
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![NumPy](https://img.shields.io/badge/NumPy-Supported-013243.svg)](https://numpy.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/KevinAndrey96/python-turning-grille-fleissner-cipher/actions/workflows/ci.yml/badge.svg)](https://github.com/KevinAndrey96/python-turning-grille-fleissner-cipher/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-3776AB)
+![Cobertura](https://img.shields.io/badge/cobertura-100%25-brightgreen)
+![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2)
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-yellow.svg)](LICENSE)
 
-Implementación interactiva en Python del algoritmo clásico de **cifrado de transposición por rejilla giratoria (Turning Grille / Rejilla de Fleissner)**. Utiliza matrices bidimensionales de caracteres con **NumPy**, soportando configuración dinámica de dimensiones de rejilla ($N \times N$), rotaciones en sentido horario y antihorario, e inspección visual de las matrices intermedias.
+Implementación tipada y probada de la **rejilla giratoria** (turning grille), el cifrado por transposición que el coronel austríaco Eduard Fleissner von Wostrowitz describió en 1881. Valida que una rejilla cubra la cuadrícula exactamente una vez, cifra y descifra en ambos sentidos de giro, genera rejillas al azar y busca por fuerza bruta la rejilla de un criptograma pequeño.
 
----
+## Contenido
 
-## 🔐 Fundamento Histórico y Criptográfico
+- [Cómo funciona](#cómo-funciona)
+- [Cuándo una rejilla es válida](#cuándo-una-rejilla-es-válida)
+- [Fuerza bruta](#fuerza-bruta)
+- [Uso](#uso)
+- [Arquitectura](#arquitectura)
+- [Pruebas y calidad](#pruebas-y-calidad)
+- [Historia del proyecto](#historia-del-proyecto)
 
-La rejilla giratoria es un sistema de cifrado de transposición fraccionada inventado por el barón austríaco **Edouard Fleissner von Wostrowitz** en 1881 y utilizado militarmente durante la Primera Guerra Mundial por el ejército alemán.
+## Cómo funciona
 
-### 1. Principio de Construcción de la Rejilla
-
-Para una matriz cuadrada de dimensión par $N \times N$ (por ejemplo, $4 \times 4$, $6 \times 6$ u $8 \times 8$):
-- El área total es $N^2$ casillas.
-- La rejilla contiene exactamente $\frac{N^2}{4}$ perforaciones o ventanas abiertas dispuestas de tal forma que, al rotar la rejilla $90^\circ$ sucesivamente en cuatro orientaciones ($0^\circ, 90^\circ, 180^\circ, 270^\circ$), cada una de las $N^2$ casillas de la matriz subyacente es expuesta **exactamente una vez**.
-
-```text
-Orientación 0° ──(Giro 90°)──> Orientación 90° ──(Giro 90°)──> Orientación 180° ──(Giro 90°)──> Orientación 270°
-```
-
-### 2. Proceso de Cifrado
-
-1. Se coloca la rejilla en su orientación inicial ($0^\circ$).
-2. Se escriben los primeros $\frac{N^2}{4}$ caracteres del mensaje a través de los huecos.
-3. Se rota la rejilla $90^\circ$ y se introducen los siguientes $\frac{N^2}{4}$ caracteres.
-4. Se repite la rotación para $180^\circ$ y $270^\circ$.
-5. Si el mensaje no llena todas las celdas, se añaden caracteres de relleno (*null characters* o letras aleatorias).
-6. Al retirar la rejilla, el texto cifrado se obtiene leyendo la matriz fila por fila (o columna por columna), generando una permutación seudoaleatoria no lineal de las posiciones originales.
-
-### 3. Proceso de Descifrado
-
-1. Se transcriben los $N^2$ caracteres del criptograma en la matriz vacía $N \times N$ por filas.
-2. Se superpone la rejilla física o lógica en la posición $0^\circ$ y se leen las letras a través de los orificios.
-3. Se gira sucesivamente a $90^\circ, 180^\circ$ y $270^\circ$, concatenando los caracteres leídos para reconstruir el mensaje original.
-
----
-
-## 📂 Estructura del Repositorio
+Una tarjeta cuadrada con perforaciones se pone sobre una cuadrícula vacía. Se escriben letras del mensaje en los agujeros, en orden de lectura; se gira la tarjeta un cuarto de vuelta y se sigue escribiendo, hasta completar cuatro posiciones. El criptograma es la cuadrícula leída por filas. Con la rejilla del trabajo original y giro antihorario:
 
 ```text
-turning-grille-algorithm/
-├── main.py        # Algoritmo interactivo de cifrado, descifrado y rotacion matricial
-└── Video.txt      # Enlace a demostracion multimedia en YouTube
+rejilla   posición 1   posición 2   posición 3   posición 4
+O...      J...         J.T.         JKT.         JKTD
+....      ....         ...T         S.AT         SAAT
+.O.O      .I.M         .IAM         .IAM         WIAM
+..O.      ..A.         C.A.         C.AT         CNAT
 ```
 
----
+`JIM ATTACKS AT DAWN` se convierte en `JKTD SAAT WIAM CNAT`. Descifrar es repetir el proceso leyendo por los agujeros. Los textos largos ocupan varias cuadrículas y la última se completa con X.
 
-## 🚀 Requisitos e Instalación
+## Cuándo una rejilla es válida
 
-### Prerrequisitos
+Cada casilla $(f, c)$ de una cuadrícula $n \times n$ recorre, al girar, una órbita de cuatro casillas: $(f, c) \to (c,\, n-1-f) \to (n-1-f,\, n-1-c) \to (n-1-c,\, f)$. La rejilla expone cada casilla exactamente una vez si y solo si tiene **un agujero en cada órbita**, es decir, $\lfloor n^2/4 \rfloor$ agujeros. En tamaños impares la casilla central es su propia órbita: si está perforada se usa solo en la primera posición, y si no, queda fuera del criptograma.
 
-- **Python** (versión 3.8 o superior).
-- Biblioteca **NumPy**.
+La clase `Grille` comprueba esta condición al construirse e indica qué órbita falla, así que una rejilla que sobrescribiría letras no puede llegar al cifrado.
 
-### Instalación de Dependencias
+## Fuerza bruta
+
+Como cada órbita aporta 4 opciones, hay $4^{\lfloor n^2/4 \rfloor}$ rejillas (el doble en tamaños impares, por el centro) y dos sentidos de giro:
+
+| Tamaño | Candidatos |
+| :-- | --: |
+| 4 x 4 | 512 |
+| 5 x 5 | 16 384 |
+| 6 x 6 | 524 288 |
+| 10 x 10 | unos $2.3 \times 10^{15}$ |
+
+`search` prueba todas las rejillas hasta 6 x 6 (unos 20 segundos en ese tamaño) y devuelve las que producen un texto con una palabra conocida. Sobre el ejemplo anterior con la palabra `attacks` aparecen dos: la rejilla original y la misma tarjeta empezando un cuarto de vuelta después, que solo rota el texto (`DAWNJIMATTACKSAT`).
+
+## Uso
+
+Requiere Python 3.12 o superior y [uv](https://docs.astral.sh/uv/). La rejilla se escribe por filas separadas por `/`, con `O` para los agujeros.
 
 ```bash
-pip install numpy
+uv sync
+uv run turning-grille encrypt -g "O.../..../.O.O/..O." -d ccw "Jim attacks at dawn"
+# JKTDSAATWIAMCNAT
+uv run turning-grille decrypt -g "O.../..../.O.O/..O." -d ccw "JKTD SAAT WIAM CNAT"
+# JIMATTACKSATDAWN
+uv run turning-grille generate -n 6 --seed 7
+# ...OO./.O.O.O/...O../.O..../....../O..O..
+uv run turning-grille search -n 4 -c attacks JKTDSAATWIAMCNAT
 ```
 
----
+El sentido de giro es `cw` (horario, por defecto) o `ccw`. Sin `--seed`, `generate` usa el generador aleatorio del sistema operativo. Una rejilla inválida, un criptograma que no completa cuadrículas o una búsqueda demasiado grande terminan con código 2 y un mensaje en la salida de error.
 
-## 💻 Guía de Uso
+Como librería:
 
-Ejecuta el script principal desde la terminal:
+```python
+from turning_grille import Direction, Grille, decrypt, encrypt, search
+
+rejilla = Grille.parse(["O...", "....", ".O.O", "..O."])
+encrypt("Jim attacks at dawn", rejilla, Direction.COUNTERCLOCKWISE)   # 'JKTDSAATWIAMCNAT'
+search("JKTDSAATWIAMCNAT", 4, "attacks")[0].grille == rejilla         # True
+```
+
+## Arquitectura
+
+```text
+src/turning_grille/
+  grille.py   rotaciones, órbitas, Grille validada, posiciones de escritura y rejillas al azar
+  cipher.py   transposición por bloques con relleno
+  attack.py   enumeración de rejillas y búsqueda con palabra conocida
+  cli.py      comandos encrypt, decrypt, generate y search
+```
+
+Sin dependencias externas. Los errores se reportan con `GrilleError`, `CiphertextLengthError` y `SearchSpaceError`, subclases de `ValueError`.
+
+## Pruebas y calidad
 
 ```bash
-python main.py
+uv run pytest --cov
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run mypy
 ```
 
-### Flujo Interactivo
+31 pruebas con cobertura del 100 % de líneas y ramas. Reproducen los dos ejemplos del trabajo original: la rejilla de 4 x 4 y una de 9 x 9 con centro perforado que cifra `THIS IS A MESSAGE THAT I AM ENCRYPTING WITH A TURNING GRILLE TO PROVIDE THIS ILLUSTRATIVE EXAMPLE`. Las pruebas basadas en propiedades con Hypothesis generan rejillas al azar de hasta 12 x 12 y verifican que cubren la cuadrícula exactamente una vez en ambos sentidos y que descifrar invierte al cifrar. El pipeline de GitHub Actions ejecuta Ruff y mypy en modo estricto, las pruebas en Python 3.12, 3.13 y 3.14, una prueba de humo del comando instalado y la construcción del paquete con `twine check`.
 
-1. **Modo de Operación**:
-   - `1` para Cifrar un mensaje.
-   - `2` para Descifrar un criptograma.
-2. **Dimensiones de la Rejilla**: Ingresa el tamaño $N$ (ejemplo: `4` para una cuadrícula $4 \times 4$).
-3. **Sentido de Rotación**:
-   - `1` para Horario.
-   - `2` para Antihorario.
-4. **Posiciones de las Perforaciones**: El sistema solicita las coordenadas `(fila, columna)` de los orificios correspondientes a la clave compartida.
-5. **Ingreso del Texto**: Escribe el texto claro o texto cifrado a procesar.
+## Historia del proyecto
 
----
+El proyecto nació en abril de 2020 como un script interactivo con NumPy para la clase de criptografía, en el que se perforaba la rejilla casilla por casilla desde la consola, acompañado de un [video explicativo](https://youtu.be/2eGU6C_wohI). No comprobaba que la rejilla fuera válida, de modo que una perforación de más sobrescribía letras sin aviso, y el criptograma de 9 x 9 que dejó anotado había perdido su última letra. En 2026 se reescribió como un paquete tipado sin dependencias, con validación por órbitas, soporte correcto del centro en tamaños impares, generación de rejillas, búsqueda exhaustiva y pruebas automatizadas; además se eliminaron del historial el entorno virtual y los archivos del IDE que se habían versionado. El código original se conserva en el tag [`v0.1-python-coursework-2020`](https://github.com/KevinAndrey96/python-turning-grille-fleissner-cipher/tree/v0.1-python-coursework-2020).
 
-## 📹 Demostración en Video
+## Autor
 
-Demostración práctica del funcionamiento y análisis del algoritmo en YouTube:
-[Demostración en YouTube](https://youtu.be/2eGU6C_wohI)
+**Kevin Andrey Herrera Silva** · [GitHub](https://github.com/KevinAndrey96)
 
----
+## Licencia
 
-## 📄 Licencia
-
-Distribuido bajo la Licencia MIT. Consulta el archivo `LICENSE` para más información.
+Distribuido bajo la [licencia MIT](LICENSE).
